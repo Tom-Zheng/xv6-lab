@@ -113,6 +113,22 @@ found:
     return 0;
   }
 
+  // setup kernel page table
+  pagetable_t kernel_ptb = (pagetable_t) kalloc();
+  memset(kernel_ptb, 0, PGSIZE);
+  kvminit_proc(kernel_ptb);
+  p->kerneltable = kernel_ptb;
+  
+  // map kernel stack
+  uint64 va = KSTACK((int) (p - proc));
+  uint64 pa = kvmpa(va);
+  kvmmap_proc(p->kerneltable, va, pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
+
+  // printf("p->kerneltable\n");
+  // vmprint(p->kerneltable);
+  // panic("debug");
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -142,6 +158,9 @@ freeproc(struct proc *p)
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
+  if(p->kerneltable)
+    free_pagetable(p->kerneltable);
+  p->kerneltable = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -472,9 +491,14 @@ scheduler(void)
         // to release its lock and then reacquire it
         // before jumping back to us.
         p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
 
+        // switch kernel pagetable
+
+
+        c->proc = p;
+        kvminithart_proc(p->kerneltable);
+        swtch(&c->context, &p->context);
+        kvminithart();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;

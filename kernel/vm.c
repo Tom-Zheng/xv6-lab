@@ -489,3 +489,95 @@ void vmprint(pagetable_t pagetable) {
   printf("page table %p\n", pagetable);
   _vmprint(pagetable, 1);
 }
+
+
+// add a mapping to the kernel page table.
+// only used when booting.
+// does not flush TLB or enable paging.
+void
+kvmmap_proc(pagetable_t ptb, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if(mappages(ptb, va, sz, pa, perm) != 0)
+    panic("kvmmap_proc");
+}
+
+/*
+ * create a direct-map page table for the kernel.
+ */
+void
+kvminit_proc(pagetable_t ptb)
+{
+  // uart registers
+  kvmmap_proc(ptb, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  kvmmap_proc(ptb, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // CLINT
+  kvmmap_proc(ptb, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // PLIC
+  kvmmap_proc(ptb, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  // map kernel text executable and read-only.
+  kvmmap_proc(ptb, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
+  // map kernel data and the physical RAM we'll make use of.
+  kvmmap_proc(ptb, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  kvmmap_proc(ptb, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+}
+
+void
+kvminithart_proc(pagetable_t ptb)
+{
+  w_satp(MAKE_SATP(ptb));
+  sfence_vma();
+}
+
+void kvmprint(void) {
+  vmprint(kernel_pagetable);
+}
+
+uint64
+kvmpa_proc(pagetable_t ptb, uint64 va)
+{
+  uint64 off = va % PGSIZE;
+  pte_t *pte;
+  uint64 pa;
+  
+  pte = walk(ptb, va, 0);
+  if(pte == 0)
+    panic("kvmpa");
+  if((*pte & PTE_V) == 0)
+    panic("kvmpa");
+  pa = PTE2PA(*pte);
+  return pa+off;
+}
+
+void
+_free_pagetable(pagetable_t p, int level) {
+  if (level == 0) {
+    kfree((void*)p);
+    return;
+  }
+  for(int i = 0; i < 512; i++){
+    pte_t pte = p[i];
+    if(pte & PTE_V) {
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      _free_pagetable((pagetable_t)child, level-1);
+      p[i] = 0;
+    }
+  }
+  kfree((void*)p);
+}
+
+// Recursively free page-table pages without freeing
+// physical addresses.
+void
+free_pagetable(pagetable_t pagetable) {
+  _free_pagetable(pagetable, 2);
+}
