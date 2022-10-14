@@ -721,3 +721,20 @@ uvminit_new(pagetable_t pagetable, pagetable_t pagetable_kernel, uchar *src, uin
 }
 
 
+int kvm_copy_from(pagetable_t dst, pagetable_t src, uint64 sz) {
+  uint64 va = 0;
+  while (va <= sz) {
+    // 1. get pa from src
+    pte_t *pte;
+    uint64 pa;
+    pte = walk(src, va, 0);
+    if (pte && (*pte & PTE_V) && (*pte & PTE_U)) {
+      int perm = PTE_FLAGS(*pte) & (~PTE_U);
+      pa = PTE2PA(*pte);
+      kvmmap_proc(dst, va, pa, PGSIZE, perm);
+    }
+    // 2. map pa to dst
+    va += PGSIZE;
+  }
+  return 0;
+}

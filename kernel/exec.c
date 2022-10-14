@@ -146,6 +146,8 @@ exec(char *path, char **argv)
     iunlockput(ip);
     end_op();
   }
+  kvmclear(p->kerneltable, sz);
+  kvm_copy_from(p->kerneltable, p->pagetable, p->sz);
   return -1;
 }
 
