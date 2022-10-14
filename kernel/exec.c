@@ -130,7 +130,7 @@ exec(char *path, char **argv)
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
-  // if(p->pid==1) vmprint(p->pagetable);
+  if(p->pid==1) vmprint(p->pagetable);
 
   // printf("--------exec: user--------\n");
   // vmprint_range(p->pagetable, 0, p->sz);
@@ -140,14 +140,19 @@ exec(char *path, char **argv)
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:
-  if(pagetable)
+  if(pagetable) {
     proc_freepagetable(pagetable, sz);
+    kvmclear(p->kerneltable, sz);
+    kvm_copy_from(p->kerneltable, p->pagetable, p->sz);
+  }
   if(ip){
     iunlockput(ip);
     end_op();
   }
-  kvmclear(p->kerneltable, sz);
-  kvm_copy_from(p->kerneltable, p->pagetable, p->sz);
+  // printf("--------exec: user--------\n");
+  // vmprint_range(p->pagetable, 0, p->sz);
+  // printf("--------exec: kernel--------\n");
+  // vmprint_range(p->kerneltable, 0, p->sz);
   return -1;
 }
 

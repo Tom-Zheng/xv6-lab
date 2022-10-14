@@ -474,29 +474,29 @@ void _vmprint(pagetable_t pagetable, int depth, uint64 min_va, uint64 max_va) {
     if (pte & PTE_V) {
       uint64 child = PTE2PA(pte);
       printf(prefix[depth]);
-      // printf("%d: pte %p pa %p\n", i, pte, (pagetable_t)child);
-      printf("%d: pte %p pa %p ", i, pte, (pagetable_t)child);
-      if (pte & PTE_R) {
-        printf("R");
-      } else {
-        printf("-");
-      }
-      if (pte & PTE_W) {
-        printf("W");
-      } else {
-        printf("-");
-      }
-      if (pte & PTE_X) {
-        printf("X");
-      } else {
-        printf("-");
-      }
-      if (pte & PTE_U) {
-        printf("U");
-      } else {
-        printf("-");
-      }
-      printf("\n");
+      printf("%d: pte %p pa %p\n", i, pte, (pagetable_t)child);
+      // printf("%d: pte %p pa %p ", i, pte, (pagetable_t)child);
+      // if (pte & PTE_R) {
+      //   printf("R");
+      // } else {
+      //   printf("-");
+      // }
+      // if (pte & PTE_W) {
+      //   printf("W");
+      // } else {
+      //   printf("-");
+      // }
+      // if (pte & PTE_X) {
+      //   printf("X");
+      // } else {
+      //   printf("-");
+      // }
+      // if (pte & PTE_U) {
+      //   printf("U");
+      // } else {
+      //   printf("-");
+      // }
+      // printf("\n");
       _vmprint((pagetable_t)child, depth+1, min_va, max_va);
     }
   }
@@ -532,9 +532,6 @@ kvminit_proc(pagetable_t ptb)
 
   // virtio mmio disk interface
   kvmmap_proc(ptb, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
-
-  // CLINT
-  kvmmap_proc(ptb, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 
   // PLIC
   kvmmap_proc(ptb, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
@@ -673,7 +670,7 @@ uvmalloc_new(pagetable_t ptb_user, pagetable_t ptb_kernel, uint64 oldsz, uint64 
     }
     memset(mem, 0, PGSIZE);
     // printf("current va: %p\n", (void*)a);
-    if (a == CLINT) {
+    if (a == PLIC) {
       kfree(mem);
       uvmdealloc_new(ptb_user, ptb_kernel, a, oldsz);
       return 0;
