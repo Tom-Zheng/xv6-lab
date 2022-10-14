@@ -41,6 +41,7 @@ sys_wait(void)
 uint64
 sys_sbrk(void)
 {
+  // printf("sbrk\n");
   int addr;
   int n;
 

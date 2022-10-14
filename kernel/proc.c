@@ -235,9 +235,19 @@ userinit(void)
   p = allocproc();
   initproc = p;
   
+  // printf("--------before userinit user--------\n");
+  // vmprint_range(p->pagetable, 0, PGSIZE-1);
+  // printf("--------before userinit kernel--------\n");
+  // vmprint_range(p->kerneltable, 0, PGSIZE-1);
+
   // allocate one user page and copy init's instructions
   // and data into it.
-  uvminit(p->pagetable, initcode, sizeof(initcode));
+  uvminit_new(p->pagetable, p->kerneltable, initcode, sizeof(initcode));
+  // printf("--------after userinit user--------\n");
+  // vmprint_range(p->pagetable, 0, PGSIZE-1);
+  // printf("--------after userinit kernel--------\n");
+  // vmprint_range(p->kerneltable, 0, PGSIZE-1);
+
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -257,16 +267,17 @@ userinit(void)
 int
 growproc(int n)
 {
+  // printf("growproc: %d\n", n);
   uint sz;
   struct proc *p = myproc();
 
   sz = p->sz;
   if(n > 0){
-    if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+    if((sz = uvmalloc_new(p->pagetable, p->kerneltable, sz, sz + n)) == 0) {
       return -1;
     }
   } else if(n < 0){
-    sz = uvmdealloc(p->pagetable, sz, sz + n);
+    sz = uvmdealloc_new(p->pagetable, p->kerneltable, sz, sz + n);
   }
   p->sz = sz;
   return 0;
@@ -277,6 +288,7 @@ growproc(int n)
 int
 fork(void)
 {
+  // printf("fork()\n");
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
@@ -287,7 +299,7 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy_new(p->pagetable, np->pagetable, np->kerneltable, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;

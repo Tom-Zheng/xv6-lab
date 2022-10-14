@@ -38,6 +38,14 @@ exec(char *path, char **argv)
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
+
+  // reset kernel table
+  // printf("before kvmclear\n");
+  // vmprint_range(p->kerneltable, 0, p->sz-1);
+  kvmclear(p->kerneltable, p->sz);
+  // printf("after kvmclear\n");
+  // vmprint_range(p->kerneltable, 0, p->sz-1);
+
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
@@ -49,8 +57,14 @@ exec(char *path, char **argv)
     if(ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
     uint64 sz1;
-    if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
+    if((sz1 = uvmalloc_new(pagetable, p->kerneltable, sz, ph.vaddr + ph.memsz)) == 0)
       goto bad;
+    // printf("pid=%d\n", p->pid);
+    // printf("--------exec: user--------\n");
+    // vmprint_range(pagetable, 0, p->sz);
+    // printf("--------exec: kernel--------\n");
+    // vmprint_range(p->kerneltable, 0, p->sz);
+
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
@@ -68,7 +82,7 @@ exec(char *path, char **argv)
   // Use the second as the user stack.
   sz = PGROUNDUP(sz);
   uint64 sz1;
-  if((sz1 = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0)
+  if((sz1 = uvmalloc_new(pagetable, p->kerneltable, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
   sz = sz1;
   uvmclear(pagetable, sz-2*PGSIZE);
@@ -116,7 +130,13 @@ exec(char *path, char **argv)
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
-  if(p->pid==1) vmprint(p->pagetable);
+  // if(p->pid==1) vmprint(p->pagetable);
+
+  // printf("--------exec: user--------\n");
+  // vmprint_range(p->pagetable, 0, p->sz);
+  // printf("--------exec: kernel--------\n");
+  // vmprint_range(p->kerneltable, 0, p->sz);
+
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:

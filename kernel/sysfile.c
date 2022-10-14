@@ -292,6 +292,13 @@ sys_open(void)
   struct inode *ip;
   int n;
 
+  // struct proc *p = myproc();
+  // printf("pid=%d\n", p->pid);
+  // printf("--------open: user--------\n");
+  // vmprint_range(p->pagetable, 0, p->sz);
+  // printf("--------open: kernel--------\n");
+  // vmprint_range(p->kerneltable, 0, p->sz);
+
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
 

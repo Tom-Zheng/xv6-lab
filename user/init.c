@@ -26,12 +26,13 @@ main(void)
 
   for(;;){
     printf("init: starting sh\n");
-    pid = fork();
+    pid = fork();    
     if(pid < 0){
       printf("init: fork failed\n");
       exit(1);
     }
     if(pid == 0){
+      // printf("init: fork returned %d\n", pid);
       exec("sh", argv);
       printf("init: exec sh failed\n");
       exit(1);
