@@ -248,6 +248,14 @@ r_mcounteren()
   return x;
 }
 
+static inline uint64
+r_fp()
+{
+  uint64 x;
+  asm volatile("mv %0, s0" : "=r" (x) );
+  return x;
+}
+
 // machine-mode cycle counter
 static inline uint64
 r_time()
