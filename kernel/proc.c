@@ -127,10 +127,17 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  // Allocate a trapframe page for alarm.
+  if((p->alarm_trapframe = (struct trapframe *)kalloc()) == 0){
+    release(&p->lock);
+    return 0;
+  }
+
   p->alarm_cnt = -1;
   p->alarm_handler = 0;
   p->alarm_ticks = 0;
-  
+  p->alarm_serving = 0;
+
   return p;
 }
 
@@ -142,6 +149,8 @@ freeproc(struct proc *p)
 {
   if(p->trapframe)
     kfree((void*)p->trapframe);
+  if(p->alarm_trapframe)
+    kfree((void*)p->alarm_trapframe);
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);

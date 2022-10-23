@@ -78,11 +78,14 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2) {
-    if (p->alarm_cnt == 0) {
+    if (p->alarm_cnt == 0 && !p->alarm_serving) {
       p->alarm_cnt = p->alarm_ticks - 1;
+      // save user state
+      *(p->alarm_trapframe) = *(p->trapframe);
       // run user handler
       // set return address to the handler function
       p->trapframe->epc = p->alarm_handler;
+      p->alarm_serving = 1;
     } else if (p->alarm_cnt > 0) {
       --p->alarm_cnt;
     }

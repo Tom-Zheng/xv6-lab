@@ -23,5 +23,9 @@ uint64 sys_sigalarm(void) {
 }
 
 uint64 sys_sigreturn(void) {
-  return 0;
+  struct proc *p;
+  p = myproc();
+  *(p->trapframe) = *(p->alarm_trapframe);
+  p->alarm_serving = 0;
+  return p->trapframe->a0;
 }
