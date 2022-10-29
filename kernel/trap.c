@@ -70,20 +70,25 @@ usertrap(void)
   } else if (r_scause() == 15) {
     // Store/AMO page fault
     uint64 va = r_stval();
-    printf("Page fault %p\n", va);
+    printf("page fault %p\n", va);
     // check if va is valid
-    // if (va > p->)
-    uint64 ka = (uint64) kalloc();
-    if (ka == 0) {
-      printf("kalloc failed\n");
+    if (va >= p->sz) {
+      printf("va invalid, sz=%d\n", p->sz);
       p->killed = 1;
     } else {
-      memset((void*) ka, 0, PGSIZE);
-      va = PGROUNDDOWN(va);
-      if (mappages(p->pagetable, va, PGSIZE, ka, PTE_W | PTE_R | PTE_U) != 0) {
-        printf("mappages failed\n");
-        kfree((void*) ka);
+      // allocate the page
+      uint64 ka = (uint64) kalloc();
+      if (ka == 0) {
+        printf("kalloc failed\n");
         p->killed = 1;
+      } else {
+        memset((void*) ka, 0, PGSIZE);
+        va = PGROUNDDOWN(va);
+        if (mappages(p->pagetable, va, PGSIZE, ka, PTE_W | PTE_R | PTE_U) != 0) {
+          printf("mappages failed\n");
+          kfree((void*) ka);
+          p->killed = 1;
+        }
       }
     }
   } else {
