@@ -183,7 +183,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+      continue;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -283,7 +283,8 @@ freewalk(pagetable_t pagetable)
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
     } else if(pte & PTE_V){
-      panic("freewalk: leaf");
+      // panic("freewalk: leaf");
+      continue;
     }
   }
   kfree((void*)pagetable);
@@ -439,4 +440,61 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+char* prefix[] = {
+  "",
+  "..",
+  ".. ..",
+  ".. .. .."
+};
+
+void _vmprint(pagetable_t pagetable, int depth, uint64 min_va, uint64 max_va) {
+  if (depth == 4) return;
+
+  int level = 3-depth;
+  
+  const int kMinIdx = min_va ? PX(level, min_va) : 0;
+  const int kMaxIdx = max_va ? PX(level, max_va) : 511;
+
+  for (int i = kMinIdx; i <= kMaxIdx; i++) {
+    pte_t pte = pagetable[i];
+    if (pte & PTE_V) {
+      uint64 child = PTE2PA(pte);
+      printf(prefix[depth]);
+      printf("%d: pte %p pa %p\n", i, pte, (pagetable_t)child);
+      // printf("%d: pte %p pa %p ", i, pte, (pagetable_t)child);
+      // if (pte & PTE_R) {
+      //   printf("R");
+      // } else {
+      //   printf("-");
+      // }
+      // if (pte & PTE_W) {
+      //   printf("W");
+      // } else {
+      //   printf("-");
+      // }
+      // if (pte & PTE_X) {
+      //   printf("X");
+      // } else {
+      //   printf("-");
+      // }
+      // if (pte & PTE_U) {
+      //   printf("U");
+      // } else {
+      //   printf("-");
+      // }
+      // printf("\n");
+      _vmprint((pagetable_t)child, depth+1, min_va, max_va);
+    }
+  }
+}
+
+void vmprint(pagetable_t pagetable) {
+  vmprint_range(pagetable, 0, 0);
+}
+
+void vmprint_range(pagetable_t pagetable, uint64 min_va, uint64 max_va) {
+  printf("page table %p\n", pagetable);
+  _vmprint(pagetable, 1, min_va, max_va);
 }
