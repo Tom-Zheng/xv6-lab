@@ -67,13 +67,16 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if (r_scause() == 15) {
-    // Store/AMO page fault
+  } else if (r_scause() == 15 || r_scause() == 13) {
+    // load/store page fault
     uint64 va = r_stval();
     printf("page fault %p\n", va);
     // check if va is valid
     if (va >= p->sz) {
       printf("va invalid, sz=%d\n", p->sz);
+      p->killed = 1;
+    } else if (va < PGROUNDUP(p->trapframe->sp)) {
+      printf("va below stack, sz=%d\n", p->sz);
       p->killed = 1;
     } else {
       // allocate the page

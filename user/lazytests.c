@@ -93,6 +93,34 @@ oom(char *s)
   }
 }
 
+void
+copyout(char *s)
+{
+  // char buf[500];
+  // char buf[500];
+  
+  char *prev_end;
+  
+  prev_end = sbrk(REGION_SZ);
+  if (prev_end == (char*)0xffffffffffffffffL) {
+    printf("sbrk() failed\n");
+    exit(1);
+  }
+
+  char* buf = prev_end + PGSIZE;
+
+  int fd;
+  if((fd = open("a", 0)) < 0){
+    fprintf(2, "cannot open a\n");
+    exit(1);
+  }
+
+  int n = read(fd, buf, sizeof(buf));
+  if (n > 0) {
+    exit(0);
+  }
+  exit(1);
+}
 // run each test in its own process. run returns 1 if child's exit()
 // indicates success.
 int
@@ -130,9 +158,10 @@ main(int argc, char *argv[])
     void (*f)(char *);
     char *s;
   } tests[] = {
-    // { sparse_memory, "lazy alloc"},
+    { sparse_memory, "lazy alloc"},
     { sparse_memory_unmap, "lazy unmap"},
-    // { oom, "out of memory"},
+    { oom, "out of memory"},
+    // { copyout, "copyout test"},
     { 0, 0},
   };
     
