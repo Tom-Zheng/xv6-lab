@@ -365,8 +365,10 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0) {
+      printf("copyout: page not mapped\n");
       struct proc *p = myproc();
       if (va0 >= p->sz) {
+        printf("copyout: exceed size limit\n");
         return -1;
       } else if (va0 < PGROUNDUP(p->trapframe->sp)) {
         return -1;
@@ -414,8 +416,35 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
+    if(pa0 == 0) {
+      printf("copyin: page not mapped\n");
+      struct proc *p = myproc();
+      if (va0 >= p->sz) {
+        printf("copyin: exceed size limit\n");
+        return -1;
+      } else if (va0 < PGROUNDUP(p->trapframe->sp)) {
+        return -1;
+      } else {
+        // allocate the page
+        uint64 ka = (uint64) kalloc();
+        if (ka == 0) {
+          return -1;
+        } else {
+          memset((void*) ka, 0, PGSIZE);
+          if (mappages(p->pagetable, va0, PGSIZE, ka, PTE_W | PTE_R | PTE_U) != 0) {
+            printf("copyout: mappages failed\n");
+            kfree((void*) ka);
+            return -1;
+          }
+        }
+      }
+      pa0 = walkaddr(pagetable, va0);
+      if (pa0 == 0) {
+        panic("copyin: still not mapped\n");
+      }
+      // printf("copyout failed\n");
+      // return -1;
+    }
     n = PGSIZE - (srcva - va0);
     if(n > len)
       n = len;
