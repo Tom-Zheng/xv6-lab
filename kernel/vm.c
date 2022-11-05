@@ -311,7 +311,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -320,12 +319,34 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
+
+    // for writable pages, enable COW
+    // else, copy as is
+    if ((flags & PTE_U) && (flags & PTE_W)) {
+      flags &= ~PTE_W;  // make read only
+      flags |= PTE_COW; // mark as COW
+    }
+    
+    // increment ref count
+    ref_increment((void *)pa);
+
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
+    }
+  }
+
+  // commit changes to parent process
+  for(i = 0; i < sz; i += PGSIZE) {
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    if ((flags & PTE_U) && (flags & PTE_W)) {
+      flags &= ~PTE_W;  // make read only
+      flags |= PTE_COW; // mark as COW
+      *pte = PA2PTE(pa) | flags | PTE_V;
     }
   }
   return 0;
@@ -439,4 +460,55 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int cow_handler(pagetable_t pagetable) {
+  uint64 va = r_stval();
+  pte_t *pte;
+  uint flags;
+  uint64 pa;
+
+  if((pte = walk(pagetable, va, 0)) == 0) {
+    printf("cow_handler: no pte\n");
+    return -1;
+  }
+  if((*pte & PTE_V) == 0) {
+    printf("cow_handler: pte not valid\n");
+    return -1;
+  }
+  pa = PTE2PA(*pte);
+  flags = PTE_FLAGS(*pte);
+
+  if (!(flags & PTE_COW)) {
+    printf("cow_handler: not a COW writable page\n");
+    return -1;
+  }
+
+  int n_ref = ref_read((void *)pa);
+  if (n_ref <= 0) {
+    panic("cow_handler: pa is empty\n");
+  } else if (n_ref == 1) {
+    // restore write permission, remove COW flag
+    flags |= PTE_W;  // make as writable
+    flags &= ~PTE_COW; // remove COW
+    *pte = PA2PTE(pa) | flags | PTE_V;
+    return 0;
+  } else { // ref count > 2, there are other procs holding the pa
+    // allocate a new page, copy from pa
+    uint64 new_pa = (uint64) kalloc();
+    if (new_pa == 0) {
+      printf("cow_handler: kalloc failed\n");
+      return -1;
+    }
+    // copy to new page
+    memmove((void *)new_pa, (void *)pa, PGSIZE);
+    // set up new mapping
+    flags |= PTE_W;  // make as writable
+    flags &= ~PTE_COW; // remove COW
+    *pte = PA2PTE(pa) | flags | PTE_V;
+    // dealloc pa (decrement ref count)
+    kfree((void *)pa);
+    return 0;
+  }
+  return 0;
 }

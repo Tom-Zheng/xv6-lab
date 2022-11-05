@@ -14,6 +14,8 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
+int ref_cnt[PHYSTOP >> 12];
+
 struct run {
   struct run *next;
 };
@@ -26,6 +28,9 @@ struct {
 void
 kinit()
 {
+  for (int i = 0; i < PHYSTOP >> 12; i++) {
+    ref_cnt[i] = 1;
+  }
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
 }
@@ -51,6 +56,14 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  int n_ref = ref_decrement(pa);
+  if (n_ref <= 0)
+    panic("kfree: double free");
+  
+  if (n_ref > 1)
+    return;
+
+  // if n_ref == 1, free the page as normal
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
@@ -76,7 +89,21 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r) {
+    REF_CNT(r) = 1;
     memset((char*)r, 5, PGSIZE); // fill with junk
+  }
   return (void*)r;
+}
+
+int ref_increment(void *pa) {
+  return __sync_fetch_and_add(&REF_CNT(pa), 1);
+}
+
+int ref_decrement(void *pa) {
+  return __sync_fetch_and_sub(&REF_CNT(pa), 1);
+}
+
+int ref_read(void *pa) {
+  return REF_CNT(pa);
 }
