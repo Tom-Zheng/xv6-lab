@@ -97,13 +97,19 @@ kalloc(void)
 }
 
 int ref_increment(void *pa) {
-  return __sync_fetch_and_add(&REF_CNT(pa), 1);
+  int ret = __sync_fetch_and_add(&REF_CNT(pa), 1);
+  // printf("ref_increment: pa: %p; ref_cnt before: %d\n", pa, ret);
+  return ret;
 }
 
 int ref_decrement(void *pa) {
-  return __sync_fetch_and_sub(&REF_CNT(pa), 1);
+  int ret = __sync_fetch_and_sub(&REF_CNT(pa), 1);
+  // printf("ref_decrement: pa: %p; ref_cnt before: %d\n", pa, ret);
+  return ret;
 }
 
 int ref_read(void *pa) {
-  return REF_CNT(pa);
+  int ret = REF_CNT(pa);
+  // printf("ref_read: pa: %p; ref_cnt: %d\n", pa, ret);
+  return ret;
 }

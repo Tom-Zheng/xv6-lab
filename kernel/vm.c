@@ -505,7 +505,7 @@ int cow_handler(pagetable_t pagetable) {
     // set up new mapping
     flags |= PTE_W;  // make as writable
     flags &= ~PTE_COW; // remove COW
-    *pte = PA2PTE(pa) | flags | PTE_V;
+    *pte = PA2PTE(new_pa) | flags | PTE_V;
     // dealloc pa (decrement ref count)
     kfree((void *)pa);
     return 0;
