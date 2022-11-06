@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -109,6 +111,32 @@ walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
   pa = PTE2PA(*pte);
   return pa;
+}
+
+// checks if COW page, 1 for yes, 0 for no, -1 for error
+int
+check_cow(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+
+  if(va >= MAXVA)
+    return -1;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    return -1;
+  if((*pte & PTE_V) == 0)
+    return -1;
+  if((*pte & PTE_U) == 0)
+    return -1;
+  if(((*pte & PTE_COW) == 0) && ((*pte & PTE_W) == 0)) {
+    panic("copyout to a non-writable page\n");
+    return -1;
+  }
+  if (*pte & PTE_COW) {
+    return 1;
+  }
+  return 0;
 }
 
 // add a mapping to the kernel page table.
@@ -379,9 +407,23 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
+    // simulates COW page fault
+    int is_cow = check_cow(pagetable, va0);
+    if (is_cow < 0) {
+      // printf("copyout: check_cow failed\n");
       return -1;
+    }
+    if (is_cow) {
+      struct proc *p = myproc();
+      if (cow_handler(p->pagetable, va0) != 0) {
+        // printf("copyout: cow_handler failed\n");
+        return -1;
+      }
+    }
+    pa0 = walkaddr(pagetable, va0);
+    if (pa0 == 0) {
+      return -1;
+    }
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
@@ -462,25 +504,24 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
-int cow_handler(pagetable_t pagetable) {
-  uint64 va = r_stval();
+int cow_handler(pagetable_t pagetable, uint64 va) {
   pte_t *pte;
   uint flags;
   uint64 pa;
 
   if((pte = walk(pagetable, va, 0)) == 0) {
-    printf("cow_handler: no pte\n");
+    // printf("cow_handler: no pte\n");
     return -1;
   }
   if((*pte & PTE_V) == 0) {
-    printf("cow_handler: pte not valid\n");
+    // printf("cow_handler: pte not valid\n");
     return -1;
   }
   pa = PTE2PA(*pte);
   flags = PTE_FLAGS(*pte);
 
   if (!(flags & PTE_COW)) {
-    printf("cow_handler: not a COW writable page\n");
+    // printf("cow_handler: not a COW writable page\n");
     return -1;
   }
 
@@ -497,7 +538,7 @@ int cow_handler(pagetable_t pagetable) {
     // allocate a new page, copy from pa
     uint64 new_pa = (uint64) kalloc();
     if (new_pa == 0) {
-      printf("cow_handler: kalloc failed\n");
+      // printf("cow_handler: kalloc failed\n");
       return -1;
     }
     // copy to new page
