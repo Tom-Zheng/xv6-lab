@@ -20,17 +20,39 @@ barrier_init(void)
   assert(pthread_mutex_init(&bstate.barrier_mutex, NULL) == 0);
   assert(pthread_cond_init(&bstate.barrier_cond, NULL) == 0);
   bstate.nthread = 0;
+  bstate.round = 0;
 }
 
 static void 
-barrier()
+barrier(long n)
 {
   // YOUR CODE HERE
   //
   // Block until all threads have called barrier() and
   // then increment bstate.round.
   //
-  
+  pthread_mutex_lock(&bstate.barrier_mutex);       // acquire lock
+  while(round < bstate.round) { 
+    pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex);
+  }
+  // printf("thread: %d, enter: round %d, bstate.nthread %d\n", n, bstate.round, bstate.nthread);
+  bstate.nthread++;
+  if (bstate.nthread == nthread) {
+    pthread_cond_broadcast(&bstate.barrier_cond);
+    bstate.nthread = -nthread;
+    bstate.round++;
+  }
+  while (bstate.nthread > 0 && bstate.nthread < nthread) {
+    // printf("thread: %d, wait: round %d, bstate.nthread %d\n", n, bstate.round, bstate.nthread);
+    pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex);
+  }
+  bstate.nthread++;
+  if (bstate.nthread == 0) {
+    pthread_cond_broadcast(&bstate.barrier_cond);
+    round++;
+  }
+  // printf("thread: %d, exit: round %d, bstate.nthread %d\n", n, bstate.round, bstate.nthread);
+  pthread_mutex_unlock(&bstate.barrier_mutex);     // release lock
 }
 
 static void *
@@ -43,7 +65,7 @@ thread(void *xa)
   for (i = 0; i < 20000; i++) {
     int t = bstate.round;
     assert (i == t);
-    barrier();
+    barrier(n);
     usleep(random() % 100);
   }
 
