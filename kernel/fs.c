@@ -672,3 +672,40 @@ nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
 }
+
+// assume ip is locked
+struct inode*
+_follow_symlink(struct inode* ip, int depth) {
+  if (ip == 0) {
+    return 0;
+  }
+  if (depth >= 10) {
+    iunlockput(ip);
+    return 0;
+  }
+  if (ip->type == 0) {
+    iunlockput(ip);
+    return 0;
+  }
+  if (ip->type != T_SYMLINK) {
+    return ip;
+  }
+  char target[MAXPATH];
+  if(readi(ip, 0, (uint64)target, 0, MAXPATH) != MAXPATH)
+    panic("_follow_symlink read");
+  
+  iunlockput(ip);
+  // next link
+  // printf("target: %s\n", target);
+  ip = namei(target);
+  if (ip == 0) {
+    return 0;
+  }
+  ilock(ip);
+  return _follow_symlink(ip, depth + 1);
+}
+
+struct inode*
+follow_symlink(struct inode* ip) {
+  return _follow_symlink(ip, 0);
+}
