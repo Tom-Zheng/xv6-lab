@@ -9,6 +9,7 @@
 #include "fs.h"
 #include "file.h"
 #include "mman.h"
+#include "fcntl.h"
 
 static void swap(uint64 *a, uint64 *b) {
   uint64 tmp = *a;
@@ -86,4 +87,61 @@ uint64 mmap(uint64 addr, uint64 length, int prot, int flags,
 
 int munmap(uint64 addr, uint64 length) {
   return -1;
+}
+
+int mmap_trap_handler(uint64 va) {
+  struct proc *p = myproc();
+  struct vma *vma_list = p->vma;
+  struct vma *curr_vma = 0;
+  for (int i = 0; i < 16; i++) {
+    if (!vma_list[i].valid)
+      continue;
+    if (va >= vma_list[i].addr && 
+          va < vma_list[i].addr + vma_list[i].length) {
+      curr_vma = &vma_list[i];
+      break;
+    }
+  }
+  if (curr_vma == 0) {
+    return -1;
+  }
+  // allocate the page
+  uint64 ka = (uint64) kalloc();
+  memset((void*) ka, 0, PGSIZE);
+  if (ka == 0) {
+    return -1;
+  } else {
+    // memset((void*) ka, 0, PGSIZE);
+    // read from file to ka
+    va = PGROUNDDOWN(va);
+    struct file *f = curr_vma->ofile;
+    if (f->type != FD_INODE) {
+      panic("mmap_trap_handler: Not a file");
+    }
+    ilock(f->ip);
+    uint64 off = va - curr_vma->addr;
+    uint fetch_size = PGSIZE;
+    uint file_size = f->ip->size;
+    if (off + fetch_size > file_size) {
+      fetch_size = file_size - off;
+    }
+    if (readi(f->ip, 0, ka, off, fetch_size) != fetch_size) {
+      panic("mmap_trap_handler: read failed");
+    }
+    iunlock(f->ip);
+    int perm = PTE_U;
+    if (curr_vma->prot & PROT_READ) {
+      perm |= PTE_R;
+    }
+    if (curr_vma->prot & PROT_WRITE) {
+      perm |= PTE_W;
+    }
+    printf("mmap_trap_handler: mappage: va=%p, ka=%p, perm=%d\n", va, ka, perm);
+    if (mappages(p->pagetable, va, PGSIZE, ka, perm) != 0) {
+      printf("mmap_trap_handler: mappages failed\n");
+      kfree((void*) ka);
+      return -1;
+    }
+  }
+  return 0;
 }
