@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "mman.h"
 
 struct cpu cpus[NCPU];
 
@@ -296,6 +297,21 @@ fork(void)
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
 
+  // copy vma
+  for (int i = 0; i < 16; i++) {
+    if (p->vma[i].valid) {
+      // copy vma info (dup fd)
+      np->vma[i].valid = p->vma[i].valid;
+      np->vma[i].base_addr = p->vma[i].base_addr;
+      np->vma[i].addr = p->vma[i].addr;
+      np->vma[i].length = p->vma[i].length;
+      np->vma[i].prot = p->vma[i].prot;
+      np->vma[i].flags = p->vma[i].flags;
+      np->vma[i].offset = p->vma[i].offset;
+      np->vma[i].ofile = filedup(p->vma[i].ofile);
+    }
+  }
+
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -343,6 +359,12 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  // unmap all vmas
+  struct vma *vma_list = p->vma;
+  for (int i = 0; i < 16; i++)
+    if (vma_list[i].valid)
+      munmap(vma_list[i].addr, vma_list[i].length);
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
